@@ -1,0 +1,58 @@
+name: FModel Builder
+
+on:
+  workflow_dispatch:
+    inputs:
+        appVersion:
+          description: 'FModel Version And Release Tag'
+          required: true
+          default: '4.0.X.X'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: GIT Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: 'true'
+
+      - name: Fetch Submodules Recursively
+        run: git submodule update --init --recursive
+
+      - name: .NET 10 Setup
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: .NET Restore
+        run: dotnet restore FModel
+
+      - name: .NET Publish
+        run: dotnet publish FModel -c Release --no-self-contained -r win-x64 -f net8.0-windows -o "./FModel/bin/Publish/" -p:PublishReadyToRun=false -p:TieredCompilation=false -p:ServerGarbageCollection=true -p:ConcurrentGarbageCollection=true -p:PublishSingleFile=true -p:DebugType=None -p:GenerateDocumentationFile=false -p:DebugSymbols=false -p:AssemblyVersion=${{ github.event.inputs.appVersion }} -p:FileVersion=${{ github.event.inputs.appVersion }}
+
+      - name: ZIP File
+        uses: papeloto/action-zip@v1.2
+        with:
+          files: ./FModel/bin/Publish/FModel.exe
+          dest: FModel.zip # will end up in working directory not the Publish folder
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FModel-${{ github.event.inputs.appVersion }}
+          path: FModel.zip
+          retention-days: 30
+
+      - name: GIT Release
+        uses: ncipollo/release-action@v1.20.0
+        with:
+          name: "FModel v${{ github.event.inputs.appVersion }}"
+          tag: ${{ github.event.inputs.appVersion }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          prerelease: false
+          artifacts: FModel.zip
